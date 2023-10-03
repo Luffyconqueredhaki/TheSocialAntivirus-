@@ -1,0 +1,44 @@
+import pandas as pd
+import sqlite3                                                           
+from sklearn.model_selection import train_test_split                                      ##LOGISTIC REGRESSION FOR DATABASE FOR GO IN PREDICTION
+from sklearn.preprocessing import LabelEncoder
+from sklearn.naive_bayes import GaussianNB
+from sklearn.metrics import accuracy_score, confusion_matrix, classification_report
+
+# Connetti al database SQL
+conn = sqlite3.connect(r'machinelearninghashfinale11.sqlite')
+
+# Esegui una query SQL per ottenere i dati desiderati
+query = "SELECT * FROM SVMADD1"
+df = pd.read_sql_query(query, conn)
+
+# Chiudi la connessione al database
+conn.close()
+
+# Rimuovi la colonna 'hashvirus_signature' dal DataFrame e utilizzala come target
+y = df['hashvirus_signature']
+X = df.drop(columns=['hashvirus_signature'])
+
+# Codifica delle variabili categoriche in X
+label_encoder = LabelEncoder()
+X['os'] = label_encoder.fit_transform(X['os'])
+X['File_type'] = label_encoder.fit_transform(X['File_type'])
+
+# Divisione dei dati in set di addestramento e test
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+
+# Crea e addestra un classificatore Naive Bayes
+model = GaussianNB()
+model.fit(X_train, y_train)
+
+# Effettua previsioni
+y_pred = model.predict(X_test)
+
+# Valutazione del modello
+accuracy = accuracy_score(y_test, y_pred)
+conf_matrix = confusion_matrix(y_test, y_pred)
+class_report = classification_report(y_test, y_pred)
+
+print(f'Accuracy: {accuracy}')
+print(f'Confusion Matrix:\n{conf_matrix}')
+print(f'Classification Report:\n{class_report}')
