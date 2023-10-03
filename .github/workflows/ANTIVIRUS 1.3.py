@@ -1,0 +1,199 @@
+import os
+import hashlib
+import shutil
+import stat
+import threading
+import time
+import sqlite3
+
+# Variabile 'connection' con il valore None
+connection = None
+
+# Variabilidi controllo dei file già messi in quarantena e in attesa
+quarantined_files = set()
+pending_quarantine = set()
+
+# Funzione per calcolare l'hash di un file
+def calculate_file_hash(file_path):
+    sha256_hash = hashlib.sha256()
+    md5_hash = hashlib.md5()
+    with open(file_path, "rb") as f:
+        for byte_block in iter(lambda: f.read(4096), b""):
+            sha256_hash.update(byte_block)
+            md5_hash.update(byte_block)
+    return sha256_hash.hexdigest(), md5_hash.hexdigest()
+
+# Funzione per spostare il file nella cartella "Quarantena"
+def move_to_quarantine(file_path, quarantine_folder):
+    filename = os.path.basename(file_path)
+    new_path = os.path.join(quarantine_folder, filename)
+    shutil.move(file_path, new_path)
+    print(f"Il file è stato messo in quarantena: {new_path}")
+    os.chmod(quarantine_folder, 0o555)
+    os.chmod(new_path, stat.S_IREAD | stat.S_IWRITE)
+    quarantined_files.add(file_path)  # Aggiungi il file a quelli messi in quarantena
+
+# Funzione per la scansione di un file alla ricerca di virus
+def scan_file_for_virus(file_path, malicious_hashes):
+    file_hashes = calculate_file_hash(file_path)
+    for signature in malicious_hashes:
+        if signature in file_hashes:
+            return True
+    return False
+
+# Funzione per recuperare le firme dal database SQLite 
+def get_all_signatures_from_db():
+    try:
+        conn = sqlite3.connect("nuovo_databasemiki.sqlite")  # Nome del file del tuo database SQLite
+        cursor = conn.cursor()
+        cursor.execute("SELECT hashvirus_signature FROM ESGVIRUSDB")  #connessione sqlitedb CON CREAZIONE OGETTO
+        signatures = set(row[0] for row in cursor.fetchall())
+        return signatures
+    except Exception as e:
+        print(f"Errore durante il recupero delle firme dal database: {e}")
+        return set()  # Restituisce un insieme vuoto se si verificano errori
+    finally:
+        if conn is not None:
+            conn.close()
+
+# Funzione per la scansione di una cartella in cerca di virus
+def scan_folder(folder_path, malicious_hashes, quarantine_folder):
+    found_suspicious_file = False
+    for root, dirs, files in os.walk(folder_path):
+        for file in files:
+            file_path = os.path.join(root, file)
+            
+            # Ignora i file di sistema: parte da fare in C
+            if "Windows" in file_path or "Program Files" in file_path:
+                continue
+            
+            if file_path not in quarantined_files and file_path not in pending_quarantine:
+                if scan_file_for_virus(file_path, malicious_hashes):
+                    found_suspicious_file = True
+                    pending_quarantine.add(file_path)  # Aggiungi il file in attesa di quarantena
+    return found_suspicious_file
+
+# Funzione per la protezione in tempo reale
+def real_time_protection(folder_path, malicious_hashes, quarantine_folder):
+    print("Protezione in tempo reale attivata.")
+    while True:
+        for root, dirs, files in os.walk(folder_path):
+            for file in files:
+                file_path = os.path.join(root, file)
+                if file_path not in quarantined_files and file_path not in pending_quarantine:
+                    if scan_file_for_virus(file_path, malicious_hashes):
+                        pending_quarantine.add(file_path)  # Aggiungi il file in attesa di quarantena
+                        print(f"File sospetto trovato: {file_path}")
+                    else:
+   #Commento la stampa "Il tuo PC è sicuro"
+                        pass
+        # Sposta i file in quarantena
+        for file_path in pending_quarantine.copy():
+            if scan_file_for_virus(file_path, malicious_hashes):
+                move_to_quarantine(file_path, quarantine_folder)
+                pending_quarantine.remove(file_path)
+        time.sleep(60)  # Scansiona ogni minuto
+
+# Funzione per la scansione delle cartelle di sistema
+def scan_system_folders(malicious_hashes, quarantine_folder):
+    system_folders = ["C:\\Windows", "C:\\Program Files"]
+    for folder in system_folders:
+        print(f"Scansione della cartella di sistema: {folder}")
+        scan_folder(folder, malicious_hashes, quarantine_folder)
+
+# Funzione per "Download"
+def get_downloads_folder():
+    try:
+        downloads_folder = os.path.expanduser("~\\Downloads")
+        return downloads_folder
+    except Exception:
+        return None
+
+# Funzione per "Documenti"
+def get_documents_folder():
+    try:
+        documents_folder = os.path.expanduser("~\\Documents")
+        return documents_folder
+    except Exception:
+        return None
+
+# Funzione per  "Immagini"
+def get_images_folder():
+    try:
+        images_folder = os.path.expanduser("~\\Pictures")
+        return images_folder
+    except Exception:
+        return None
+
+# Funzione  "Video"
+def get_videos_folder():
+    try:
+        videos_folder = os.path.expanduser("~\\Videos")
+        return videos_folder
+    except Exception:
+        return None
+
+# ridefinizione path "Quarantena" sulla scrivania
+def get_quarantine_folder():
+    desktop_folder = os.path.join(os.path.expanduser("~"), "Desktop")
+    quarantine_folder = os.path.join(desktop_folder, "Quarantena")
+    os.makedirs(quarantine_folder, exist_ok=True)
+    return quarantine_folder
+
+# Funzione "Desktop"
+def scan_desktop_for_virus(malicious_hashes, quarantine_folder):
+    desktop_folder = os.path.expanduser("~\\Desktop")
+    for root, dirs, files in os.walk(desktop_folder):
+        for file in files:
+            file_path = os.path.join(root, file)
+            if file_path not in quarantined_files and file_path not in pending_quarantine:
+                if scan_file_for_virus(file_path, malicious_hashes):
+                    pending_quarantine.add(file_path)  # Aggiungi il file in attesa di quarantena
+
+# Funzione principale
+def main():
+    malicious_hashes = get_all_signatures_from_db()  # Recupera tutte le firme dal database
+    quarantine_folder = get_quarantine_folder()  # assegna il percorso di quarantena
+
+    # Scansione della cartella Desktop
+    print("Scansione della cartella Desktop...")
+    scan_desktop_for_virus(malicious_hashes, quarantine_folder)
+
+    # Avvia la protezione in tempo reale 
+    real_time_thread = threading.Thread(target=real_time_protection, args=(get_downloads_folder(), malicious_hashes, quarantine_folder))
+    real_time_thread.daemon = True  # Termina il thread quando il programma termina
+    real_time_thread.start()
+
+    print("Scansione iniziale delle cartelle di sistema...")
+    scan_system_folders(malicious_hashes, quarantine_folder)
+
+    # Scansione delle cartelle "Download", "Documenti", "Immagini" e "Video" (se presenti)
+    downloads_folder = get_downloads_folder()
+    documents_folder = get_documents_folder()
+    images_folder = get_images_folder()
+    videos_folder = get_videos_folder()
+
+    if downloads_folder is not None:
+        print(f"Scansione della cartella Download: {downloads_folder}")
+        scan_folder(downloads_folder, malicious_hashes, quarantine_folder)
+
+    if documents_folder is not None:
+        print(f"Scansione della cartella Documenti: {documents_folder}")
+        scan_folder(documents_folder, malicious_hashes, quarantine_folder)
+
+    if images_folder is not None:
+        print(f"Scansione della cartella Immagini: {images_folder}")
+        scan_folder(images_folder, malicious_hashes, quarantine_folder)
+
+    if videos_folder is not None:
+        print(f"Scansione della cartella Video: {videos_folder}")
+        scan_folder(videos_folder, malicious_hashes, quarantine_folder)
+
+if __name__ == "__main__":
+    main()
+  #  while True:
+        #main()  # Esegui la scansione principale ogni 60 secondi
+       # time.sleep(60)
+#levando questi commenti il codice va in loop eterno il che è ottimop per la protezione in tempo reali in quanto non  sviluppata efficacemente ancora 
+#we have leave this part with no code because the challange for the beginnekl like us is to replace this parte with a code that no reprint the loop print
+#Good LuCK!
