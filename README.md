@@ -13,6 +13,8 @@ The AI certainly helped us to understand the more complex errors, but it is real
 The centrality of this project, is that it can in turn be used to learn, and if we even help someone, we have created value.
 I don't know when we might publish the next versions, keep it up and feel like #improving it! That in the end the spirit of open source and shared learning is nothing but that!
 
+EXECUTE THE CODE WITH PRIVILEGES!
+
 BETTER OUR PROGRAMME AND CONTACT US HERE FOR BETTER VERSIONS/IDEA!
 
 afjmstartup@proton.me
